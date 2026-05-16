@@ -750,7 +750,7 @@ async function agentCommandInternal(
     let storedModelOverrideSource = hasStoredOverride
       ? sessionEntry?.modelOverrideSource
       : undefined;
-    const hasStoredAutoFallbackProvenance =
+    let hasStoredAutoFallbackProvenance =
       hasStoredOverride && hasSessionAutoModelFallbackProvenance(sessionEntry);
     const explicitProviderOverride =
       typeof opts.provider === "string"
@@ -786,7 +786,45 @@ async function agentCommandInternal(
       allowedModelCatalog = visibilityPolicy.allowedCatalog;
     }
 
-    if (sessionEntry && sessionStore && sessionKey && hasStoredOverride) {
+    const shouldClearDirectAutoFallbackOverride = Boolean(
+      sessionEntry &&
+      hasStoredOverride &&
+      !hasExplicitRunOverride &&
+      (sessionEntry.modelOverrideSource === "auto" ||
+        (sessionEntry.modelOverrideSource === undefined && hasStoredAutoFallbackProvenance)),
+    );
+
+    if (
+      sessionEntry &&
+      sessionStore &&
+      sessionKey &&
+      hasStoredOverride &&
+      shouldClearDirectAutoFallbackOverride
+    ) {
+      const { updated } = applyModelOverrideToSessionEntry({
+        entry: sessionEntry,
+        selection: { provider: defaultProvider, model: defaultModel, isDefault: true },
+        preserveAuthProfileOverride: sessionEntry.authProfileOverrideSource === "user",
+      });
+      if (updated) {
+        await persistSessionEntry({
+          sessionStore,
+          sessionKey,
+          storePath,
+          entry: sessionEntry,
+        });
+      }
+      storedModelOverrideSource = undefined;
+      hasStoredAutoFallbackProvenance = false;
+    }
+
+    if (
+      sessionEntry &&
+      sessionStore &&
+      sessionKey &&
+      hasStoredOverride &&
+      !shouldClearDirectAutoFallbackOverride
+    ) {
       const entry = sessionEntry;
       const repaired = repairProviderWrappedModelOverride({
         entry,
@@ -823,8 +861,12 @@ async function agentCommandInternal(
       }
     }
 
-    const storedProviderOverride = sessionEntry?.providerOverride?.trim();
-    let storedModelOverride = sessionEntry?.modelOverride?.trim();
+    const storedProviderOverride = shouldClearDirectAutoFallbackOverride
+      ? undefined
+      : sessionEntry?.providerOverride?.trim();
+    let storedModelOverride = shouldClearDirectAutoFallbackOverride
+      ? undefined
+      : sessionEntry?.modelOverride?.trim();
     if (storedModelOverride) {
       const candidateProvider = storedProviderOverride || defaultProvider;
       const normalizedStored = normalizeModelRef(candidateProvider, storedModelOverride);
