@@ -276,6 +276,8 @@ export type SessionEntry = {
   /** Selected model that produced the current auto fallback override. */
   modelOverrideFallbackOriginProvider?: string;
   modelOverrideFallbackOriginModel?: string;
+  /** Last time the original primary was attempted before selecting the auto fallback. */
+  modelOverrideFallbackLastProbeAt?: number;
   authProfileOverride?: string;
   authProfileOverrideSource?: "auto" | "user";
   authProfileOverrideCompactionCount?: number;

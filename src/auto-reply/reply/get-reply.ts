@@ -734,7 +734,7 @@ export async function getReplyFromConfig(
     modelState,
     contextTokens,
     inlineStatusRequested,
-    deferredAutoFallbackClear,
+    deferredAutoFallbackProbe,
     refreshModelDefaultThinkingLevel,
     refreshModelDefaultReasoningLevel,
     directiveAck,
@@ -816,7 +816,7 @@ export async function getReplyFromConfig(
   directives = inlineActionResult.directives;
   cleanedBody = inlineActionResult.cleanedBody;
   abortedLastRun = inlineActionResult.abortedLastRun ?? abortedLastRun;
-  if (deferredAutoFallbackClear) {
+  if (deferredAutoFallbackProbe) {
     const refreshedSessionEntry = sessionStore[sessionKey] ?? sessionEntry;
     modelState = await createModelSelectionState({
       cfg,
@@ -840,7 +840,7 @@ export async function getReplyFromConfig(
       hasOneTurnModelOverride: hasAppliedImageModelOverride,
       hasResolvedHeartbeatModelOverride,
       isHeartbeat: resolvedOpts?.isHeartbeat === true,
-      clearDirectAutoFallbackOverride: true,
+      allowAutoFallbackPrimaryProbe: true,
     });
     provider = modelState.provider;
     model = modelState.model;

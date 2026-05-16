@@ -1,7 +1,4 @@
-import {
-  hasSessionAutoModelFallbackProvenance,
-  resolveAgentConfig,
-} from "../../agents/agent-scope.js";
+import { resolveAgentConfig } from "../../agents/agent-scope.js";
 import { clearSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import { resolveContextTokensForModel } from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
@@ -22,6 +19,10 @@ import {
   type ModelVisibilityPolicy,
 } from "../../agents/model-visibility-policy.js";
 import { listOpenAIAuthProfileProvidersForAgentRuntime } from "../../agents/openai-codex-routing.js";
+import {
+  hasAutoFallbackModelOverride,
+  shouldProbeAutoFallbackPrimary,
+} from "../../config/sessions/model-fallback-probe.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { applyModelOverrideToSessionEntry } from "../../sessions/model-overrides.js";
@@ -111,7 +112,7 @@ export async function createModelSelectionState(params: {
    *  In that case, skip session-stored overrides so the heartbeat selection wins. */
   hasResolvedHeartbeatModelOverride?: boolean;
   isHeartbeat?: boolean;
-  clearDirectAutoFallbackOverride?: boolean;
+  allowAutoFallbackPrimaryProbe?: boolean;
 }): Promise<ModelSelectionState> {
   const timingEnabled = shouldLogModelSelectionTiming();
   const startMs = timingEnabled ? Date.now() : 0;
@@ -176,16 +177,13 @@ export async function createModelSelectionState(params: {
     ? { ...directStoredOverride, source: "session" as const }
     : null;
   const hasDirectAutoFallbackOverride = Boolean(
-    directStoredOverride &&
-    sessionEntry &&
-    (sessionEntry.modelOverrideSource === "auto" ||
-      (sessionEntry.modelOverrideSource === undefined &&
-        hasSessionAutoModelFallbackProvenance(sessionEntry))),
+    directStoredOverride && sessionEntry && hasAutoFallbackModelOverride(sessionEntry),
   );
-  const shouldClearDirectAutoFallbackOverride =
+  const shouldProbeDirectAutoFallbackOverride =
     hasDirectAutoFallbackOverride &&
-    params.clearDirectAutoFallbackOverride !== false &&
-    !hasOneTurnModelOverride;
+    params.allowAutoFallbackPrimaryProbe !== false &&
+    !hasOneTurnModelOverride &&
+    shouldProbeAutoFallbackPrimary({ entry: sessionEntry });
   const staleHeartbeatAutoFallbackOverride = isStaleHeartbeatAutoFallbackOverride({
     isHeartbeat: params.isHeartbeat,
     hasResolvedHeartbeatModelOverride: params.hasResolvedHeartbeatModelOverride,
@@ -196,6 +194,8 @@ export async function createModelSelectionState(params: {
     primaryProvider: params.primaryProvider,
     primaryModel: params.primaryModel,
   });
+  const shouldClearDirectAutoFallbackOverride =
+    shouldProbeDirectAutoFallbackOverride || staleHeartbeatAutoFallbackOverride;
 
   if (needsModelCatalog) {
     modelCatalog = await (await loadModelCatalogRuntime()).loadModelCatalog({ config: cfg });

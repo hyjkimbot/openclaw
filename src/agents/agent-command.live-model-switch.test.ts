@@ -755,6 +755,7 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
         delete typed.entry.modelOverrideSource;
         delete typed.entry.modelOverrideFallbackOriginProvider;
         delete typed.entry.modelOverrideFallbackOriginModel;
+        delete typed.entry.modelOverrideFallbackLastProbeAt;
       } else {
         typed.entry.providerOverride = typed.selection.provider;
         typed.entry.modelOverride = typed.selection.model;
@@ -804,7 +805,7 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
     expect(lifecycleEndCalls.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("clears direct auto-fallback session overrides before direct agent runs", async () => {
+  it("probes direct auto-fallback session overrides without a recent primary attempt", async () => {
     const sessionEntry = {
       sessionId: "session-1",
       updatedAt: Date.now(),
@@ -818,6 +819,17 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
     state.sessionEntryMock = sessionEntry;
     state.sessionStoreMock = { "agent:main": sessionEntry };
     state.storePathMock = "/tmp/test-session-store.json";
+    state.hasSessionAutoModelFallbackProvenanceMock.mockReturnValue(true);
+    state.runtimeConfigMock = {
+      agents: {
+        defaults: {
+          models: {
+            "anthropic/claude": {},
+            "openrouter/minimax/minimax-m2.7": {},
+          },
+        },
+      },
+    };
     state.runWithModelFallbackMock.mockImplementation(async (params: FallbackRunnerParams) => {
       const result = await params.run(params.provider, params.model);
       return {
@@ -847,6 +859,59 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
         selection: { provider: "anthropic", model: "claude", isDefault: true },
       }),
     );
+  });
+
+  it("keeps fresh direct auto-fallback session overrides before direct agent runs", async () => {
+    const sessionEntry = {
+      sessionId: "session-1",
+      updatedAt: Date.now(),
+      providerOverride: "openrouter",
+      modelOverride: "minimax/minimax-m2.7",
+      modelOverrideSource: "auto" as const,
+      modelOverrideFallbackOriginProvider: "anthropic",
+      modelOverrideFallbackOriginModel: "claude-opus-4-6",
+      modelOverrideFallbackLastProbeAt: Date.now(),
+      skillsSnapshot: { prompt: "", skills: [], version: 0 },
+    };
+    state.sessionEntryMock = sessionEntry;
+    state.sessionStoreMock = { "agent:main": sessionEntry };
+    state.storePathMock = "/tmp/test-session-store.json";
+    state.hasSessionAutoModelFallbackProvenanceMock.mockReturnValue(true);
+    state.runtimeConfigMock = {
+      agents: {
+        defaults: {
+          models: {
+            "anthropic/claude": {},
+            "openrouter/minimax/minimax-m2.7": {},
+          },
+        },
+      },
+    };
+    state.runWithModelFallbackMock.mockImplementation(async (params: FallbackRunnerParams) => {
+      const result = await params.run(params.provider, params.model);
+      return {
+        result,
+        provider: params.provider,
+        model: params.model,
+        attempts: [],
+      };
+    });
+    state.runAgentAttemptMock.mockResolvedValue(makeSuccessResult("openrouter", "minimax"));
+
+    await runBasicAgentCommand();
+
+    expect(state.runWithModelFallbackMock).toHaveBeenCalledTimes(1);
+    const fallbackCall = mockCallArg(state.runWithModelFallbackMock) as FallbackRunnerParams;
+    expect(fallbackCall.provider).toBe("openrouter");
+    expect(fallbackCall.model).toBe("minimax/minimax-m2.7");
+    expect(state.resolveEffectiveModelFallbacksMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hasSessionModelOverride: true,
+        modelOverrideSource: "auto",
+        hasAutoFallbackProvenance: true,
+      }),
+    );
+    expect(state.applyModelOverrideToSessionEntryMock).not.toHaveBeenCalled();
   });
 
   it("validates explicit thinking against configured model compat without an allowlist", async () => {

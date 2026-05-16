@@ -17,6 +17,10 @@ function clearFallbackOrigin(entry: SessionEntry): boolean {
     delete entry.modelOverrideFallbackOriginModel;
     updated = true;
   }
+  if (entry.modelOverrideFallbackLastProbeAt !== undefined) {
+    delete entry.modelOverrideFallbackLastProbeAt;
+    updated = true;
+  }
   return updated;
 }
 

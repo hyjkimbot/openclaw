@@ -21,7 +21,7 @@ For a normal text run, OpenClaw evaluates candidates in this order:
 
 <Steps>
   <Step title="Resolve session state">
-    Resolve the active session model and auth-profile preference. A direct auto fallback override from an earlier turn is cleared first so the configured primary is retried; user-selected overrides stay sticky.
+    Resolve the active session model and auth-profile preference. A direct auto fallback override stays selected until its primary-probe interval expires; then OpenClaw clears it for one run and retries the configured primary. User-selected overrides stay sticky.
   </Step>
   <Step title="Build candidate chain">
     Build the model candidate chain from the current model selection and the fallback policy for that selection source. Configured defaults, cron job primaries, and auto-selected fallback models can use configured fallbacks; explicit user session selections are strict.
@@ -51,6 +51,7 @@ This is intentionally narrower than "save and restore the whole session". The re
 - `authProfileOverride`
 - `authProfileOverrideSource`
 - `authProfileOverrideCompactionCount`
+- `modelOverrideFallbackLastProbeAt`
 
 That prevents a failed fallback retry from overwriting newer unrelated session mutations such as manual `/model` changes or session rotation updates that happened while the attempt was running.
 
@@ -60,10 +61,12 @@ OpenClaw separates the selected provider/model from why it was selected. That so
 
 - **Configured default**: `agents.defaults.model.primary` uses `agents.defaults.model.fallbacks`.
 - **Agent primary**: `agents.list[].model` is strict unless that agent model object includes its own `fallbacks`. Use `fallbacks: []` to make the strict behavior explicit, or provide a non-empty list to opt that agent into model fallback.
-- **Auto fallback override**: a runtime fallback writes `providerOverride`, `modelOverride`, `modelOverrideSource: "auto"`, and the selected origin model before retrying. That auto override is cleared before the next turn starts so the configured primary is retried; if the primary is still unhealthy, fallback writes a fresh auto override for that turn. `/new`, `/reset`, and `sessions.reset` also clear auto-sourced overrides.
+- **Auto fallback override**: a runtime fallback writes `providerOverride`, `modelOverride`, `modelOverrideSource: "auto"`, the selected origin model, and `modelOverrideFallbackLastProbeAt` before retrying. The override stays selected on later turns so a known-bad primary does not slow every message. After the primary-probe interval expires, the next normal turn clears the auto override and retries the configured primary once. If the primary is healthy, the session remains on the primary. If it still fails, fallback writes a fresh auto override and probe timestamp. `/new`, `/reset`, and `sessions.reset` also clear auto-sourced overrides.
 - **User session override**: `/model`, the model picker, `session_status(model=...)`, and `sessions.patch` write `modelOverrideSource: "user"`. That is an exact session selection. If the selected provider/model fails before producing a reply, OpenClaw reports the failure instead of answering from an unrelated configured fallback.
 - **Legacy session override**: older session entries may have `modelOverride` without `modelOverrideSource`. OpenClaw treats those as user overrides so an explicit old selection is not silently converted into fallback behavior.
 - **Cron payload model**: a cron job `payload.model` / `--model` is a job primary, not a user session override. It uses configured fallbacks unless the job provides `payload.fallbacks`; `payload.fallbacks: []` makes the cron run strict.
+
+The auto fallback primary-probe interval is five minutes. Older auto fallback entries without a probe timestamp are probed on their next normal turn, then use the same interval after fallback records a fresh timestamp.
 
 ## Auth storage (keys + OAuth)
 
@@ -305,7 +308,7 @@ That means fallback retries have to coordinate with live model switching:
 - System-driven model changes such as fallback rotation, heartbeat overrides, or compaction never mark a pending live switch on their own.
 - User-driven model overrides are treated as exact selections for fallback policy, so an unreachable selected provider surfaces as a failure instead of being masked by `agents.defaults.model.fallbacks`.
 - Before a fallback retry starts, the reply runner persists the selected fallback override fields to the session entry.
-- Auto fallback overrides are one-turn recovery state. The next run clears direct auto-sourced overrides before model selection, retries the configured primary immediately, and lets fallback record a fresh auto override only if the primary still fails.
+- Auto fallback overrides are cooldown-gated recovery state. They stay selected between turns, then OpenClaw periodically clears the direct auto override to probe the configured primary once. A successful primary run leaves the override cleared; a failed primary lets fallback record a fresh auto override and probe timestamp.
 - `/status` shows the selected model and, when fallback state differs, the active fallback model and reason.
 - Live-session reconciliation prefers persisted session overrides over stale runtime model fields.
 - If a live-switch error points at a later candidate in the active fallback chain, OpenClaw jumps directly to that selected model instead of walking unrelated candidates first.

@@ -142,6 +142,7 @@ type FallbackSelectionState = Pick<
   | "modelOverrideSource"
   | "modelOverrideFallbackOriginProvider"
   | "modelOverrideFallbackOriginModel"
+  | "modelOverrideFallbackLastProbeAt"
   | "authProfileOverride"
   | "authProfileOverrideSource"
   | "authProfileOverrideCompactionCount"
@@ -153,6 +154,7 @@ const FALLBACK_SELECTION_STATE_KEYS = [
   "modelOverrideSource",
   "modelOverrideFallbackOriginProvider",
   "modelOverrideFallbackOriginModel",
+  "modelOverrideFallbackLastProbeAt",
   "authProfileOverride",
   "authProfileOverrideSource",
   "authProfileOverrideCompactionCount",
@@ -196,6 +198,13 @@ function setFallbackSelectionStateField(
         return true;
       }
       return false;
+    case "modelOverrideFallbackLastProbeAt":
+      if (entry.modelOverrideFallbackLastProbeAt !== value) {
+        entry.modelOverrideFallbackLastProbeAt =
+          value as SessionEntry["modelOverrideFallbackLastProbeAt"];
+        return true;
+      }
+      return false;
     case "authProfileOverride":
       if (entry.authProfileOverride !== value) {
         entry.authProfileOverride = value as SessionEntry["authProfileOverride"];
@@ -226,6 +235,7 @@ function snapshotFallbackSelectionState(entry: SessionEntry): FallbackSelectionS
     modelOverrideSource: entry.modelOverrideSource,
     modelOverrideFallbackOriginProvider: entry.modelOverrideFallbackOriginProvider,
     modelOverrideFallbackOriginModel: entry.modelOverrideFallbackOriginModel,
+    modelOverrideFallbackLastProbeAt: entry.modelOverrideFallbackLastProbeAt,
     authProfileOverride: entry.authProfileOverride,
     authProfileOverrideSource: entry.authProfileOverrideSource,
     authProfileOverrideCompactionCount: entry.authProfileOverrideCompactionCount,
@@ -239,6 +249,7 @@ function buildFallbackSelectionState(params: {
   originModel: string;
   authProfileId?: string;
   authProfileIdSource?: "auto" | "user";
+  now: number;
 }): FallbackSelectionState {
   return {
     providerOverride: params.provider,
@@ -246,6 +257,7 @@ function buildFallbackSelectionState(params: {
     modelOverrideSource: "auto",
     modelOverrideFallbackOriginProvider: params.originProvider,
     modelOverrideFallbackOriginModel: params.originModel,
+    modelOverrideFallbackLastProbeAt: params.now,
     authProfileOverride: params.authProfileId,
     authProfileOverrideSource: params.authProfileId ? params.authProfileIdSource : undefined,
     authProfileOverrideCompactionCount: undefined,
@@ -293,6 +305,7 @@ export function applyFallbackCandidateSelectionToEntry(params: {
     originModel: origin.model,
     authProfileId: scopedAuthProfile.authProfileId,
     authProfileIdSource: scopedAuthProfile.authProfileIdSource,
+    now: params.now ?? Date.now(),
   });
   return {
     updated: applyFallbackSelectionState(params.entry, nextState, params.now),

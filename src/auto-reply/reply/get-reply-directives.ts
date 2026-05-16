@@ -133,7 +133,7 @@ export type ReplyDirectiveContinuation = {
   modelState: Awaited<ReturnType<typeof createModelSelectionState>>;
   contextTokens: number;
   inlineStatusRequested: boolean;
-  deferredAutoFallbackClear: boolean;
+  deferredAutoFallbackProbe: boolean;
   refreshModelDefaultThinkingLevel: boolean;
   refreshModelDefaultReasoningLevel: boolean;
   directiveAck?: ReplyPayload;
@@ -516,7 +516,7 @@ export async function resolveReplyDirectives(params: {
         defaultProvider,
         aliasIndex: params.aliasIndex,
       }));
-  const deferredAutoFallbackClear =
+  const deferredAutoFallbackProbe =
     hasInlineStatus ||
     (allowTextCommands &&
       command.isAuthorizedSender &&
@@ -548,7 +548,7 @@ export async function resolveReplyDirectives(params: {
         hasOneTurnModelOverride,
         hasResolvedHeartbeatModelOverride,
         isHeartbeat: opts?.isHeartbeat === true,
-        clearDirectAutoFallbackOverride: !deferredAutoFallbackClear,
+        allowAutoFallbackPrimaryProbe: !deferredAutoFallbackProbe,
       });
   provider = modelState.provider;
   model = modelState.model;
@@ -682,7 +682,7 @@ export async function resolveReplyDirectives(params: {
       modelState,
       contextTokens,
       inlineStatusRequested,
-      deferredAutoFallbackClear,
+      deferredAutoFallbackProbe,
       refreshModelDefaultThinkingLevel:
         resolvedThinkLevel === undefined && agentCfg?.thinkingDefault === undefined,
       refreshModelDefaultReasoningLevel: !reasoningExplicitlySet && !thinkingExplicitlySet,

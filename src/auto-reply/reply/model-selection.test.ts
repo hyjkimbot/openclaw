@@ -893,6 +893,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
     modelOverrideSource: "auto" | "user" | undefined;
     modelOverrideFallbackOriginProvider?: string;
     modelOverrideFallbackOriginModel?: string;
+    modelOverrideFallbackLastProbeAt?: number;
     fallbackNoticeSelectedModel?: string;
     authProfileOverride?: string;
     authProfileOverrideSource?: "auto" | "user";
@@ -901,7 +902,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
     primaryProvider?: string;
     primaryModel?: string;
     isHeartbeat?: boolean;
-    clearDirectAutoFallbackOverride?: boolean;
+    allowAutoFallbackPrimaryProbe?: boolean;
   }) {
     const cfg = {} as OpenClawConfig;
     const sessionEntry = makeEntry({
@@ -910,6 +911,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
       modelOverrideSource: params.modelOverrideSource,
       modelOverrideFallbackOriginProvider: params.modelOverrideFallbackOriginProvider,
       modelOverrideFallbackOriginModel: params.modelOverrideFallbackOriginModel,
+      modelOverrideFallbackLastProbeAt: params.modelOverrideFallbackLastProbeAt,
       fallbackNoticeSelectedModel: params.fallbackNoticeSelectedModel,
       authProfileOverride: params.authProfileOverride,
       authProfileOverrideSource: params.authProfileOverrideSource,
@@ -929,12 +931,12 @@ describe("createModelSelectionState auto-failover overrides", () => {
       model: params.model ?? defaultModel,
       hasModelDirective: false,
       isHeartbeat: params.isHeartbeat,
-      clearDirectAutoFallbackOverride: params.clearDirectAutoFallbackOverride,
+      allowAutoFallbackPrimaryProbe: params.allowAutoFallbackPrimaryProbe,
     });
     return { state, sessionEntry, sessionStore };
   }
 
-  it("clears auto-failover override and retries the configured primary", async () => {
+  it("probes the configured primary for legacy auto-failover overrides", async () => {
     const { state, sessionStore } = await resolveStateWithOverride({
       providerOverride: "openrouter",
       modelOverride: "minimax/minimax-m2.7",
@@ -949,12 +951,42 @@ describe("createModelSelectionState auto-failover overrides", () => {
     expect(state.resetModelOverride).toBe(false);
   });
 
+  it("keeps fresh auto-failover overrides until the primary probe interval expires", async () => {
+    const { state, sessionStore } = await resolveStateWithOverride({
+      providerOverride: "openrouter",
+      modelOverride: "minimax/minimax-m2.7",
+      modelOverrideSource: "auto",
+      modelOverrideFallbackLastProbeAt: Date.now(),
+    });
+
+    expect(state.provider).toBe("openrouter");
+    expect(state.model).toBe("minimax/minimax-m2.7");
+    expect(sessionStore[sessionKey]?.providerOverride).toBe("openrouter");
+    expect(sessionStore[sessionKey]?.modelOverride).toBe("minimax/minimax-m2.7");
+    expect(sessionStore[sessionKey]?.modelOverrideSource).toBe("auto");
+  });
+
+  it("probes the configured primary after the auto-failover cooldown expires", async () => {
+    const { state, sessionStore } = await resolveStateWithOverride({
+      providerOverride: "openrouter",
+      modelOverride: "minimax/minimax-m2.7",
+      modelOverrideSource: "auto",
+      modelOverrideFallbackLastProbeAt: Date.now() - 10 * 60 * 1000,
+    });
+
+    expect(state.provider).toBe(defaultProvider);
+    expect(state.model).toBe(defaultModel);
+    expect(sessionStore[sessionKey]?.providerOverride).toBeUndefined();
+    expect(sessionStore[sessionKey]?.modelOverride).toBeUndefined();
+    expect(sessionStore[sessionKey]?.modelOverrideSource).toBeUndefined();
+  });
+
   it("keeps direct auto-failover override while only resolving directives", async () => {
     const { state, sessionStore } = await resolveStateWithOverride({
       providerOverride: "openrouter",
       modelOverride: "minimax/minimax-m2.7",
       modelOverrideSource: "auto",
-      clearDirectAutoFallbackOverride: false,
+      allowAutoFallbackPrimaryProbe: false,
     });
 
     expect(state.provider).toBe("openrouter");
@@ -994,7 +1026,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
       provider: defaultProvider,
       model: defaultModel,
       hasModelDirective: false,
-      clearDirectAutoFallbackOverride: true,
+      allowAutoFallbackPrimaryProbe: true,
     });
 
     expect(state.provider).toBe("anthropic");
@@ -1033,7 +1065,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
       provider: "openrouter",
       model: "minimax/minimax-m2.7",
       hasModelDirective: false,
-      clearDirectAutoFallbackOverride: true,
+      allowAutoFallbackPrimaryProbe: true,
     });
 
     expect(state.provider).toBe(defaultProvider);
@@ -1063,7 +1095,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
       provider: "openrouter",
       model: "minimax/minimax-m2.7",
       hasModelDirective: false,
-      clearDirectAutoFallbackOverride: true,
+      allowAutoFallbackPrimaryProbe: true,
     });
 
     expect(state.provider).toBe(defaultProvider);

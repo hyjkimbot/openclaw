@@ -10,6 +10,7 @@ import {
 import { formatCliCommand } from "../cli/command-format.js";
 import type { CliDeps } from "../cli/deps.types.js";
 import { getRuntimeConfig } from "../config/io.js";
+import { shouldProbeAutoFallbackPrimary } from "../config/sessions/model-fallback-probe.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import { withLocalGatewayRequestScope } from "../gateway/local-request-context.js";
 import {
@@ -791,7 +792,8 @@ async function agentCommandInternal(
       hasStoredOverride &&
       !hasExplicitRunOverride &&
       (sessionEntry.modelOverrideSource === "auto" ||
-        (sessionEntry.modelOverrideSource === undefined && hasStoredAutoFallbackProvenance)),
+        (sessionEntry.modelOverrideSource === undefined && hasStoredAutoFallbackProvenance)) &&
+      shouldProbeAutoFallbackPrimary({ entry: sessionEntry }),
     );
 
     if (

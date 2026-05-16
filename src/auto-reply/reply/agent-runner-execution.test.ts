@@ -4212,6 +4212,7 @@ describe("runAgentTurnWithFallback", () => {
     expect(sessionEntry.modelOverrideSource).toBe("auto");
     expect(sessionEntry.modelOverrideFallbackOriginProvider).toBe("minimax");
     expect(sessionEntry.modelOverrideFallbackOriginModel).toBe("MiniMax-M2.7");
+    expect(sessionEntry.modelOverrideFallbackLastProbeAt).toEqual(expect.any(Number));
   });
 
   it("does not persist fallback selection when modelOverrideSource is user", async () => {
@@ -4311,6 +4312,7 @@ describe("runAgentTurnWithFallback", () => {
       modelOverrideSource: "auto",
       modelOverrideFallbackOriginProvider: "anthropic",
       modelOverrideFallbackOriginModel: "claude-opus",
+      modelOverrideFallbackLastProbeAt: 123,
       authProfileOverride: "anthropic:openclaw",
       authProfileOverrideSource: "user",
     });
@@ -4348,6 +4350,7 @@ describe("runAgentTurnWithFallback", () => {
       modelOverrideSource: "auto",
       modelOverrideFallbackOriginProvider: "anthropic",
       modelOverrideFallbackOriginModel: "claude-opus",
+      modelOverrideFallbackLastProbeAt: 123,
     });
   });
 });
